@@ -86,21 +86,19 @@ jobs:
             docker system prune -f
             docker-compose --env-file backend/.env up -d --build
             sleep 10  # Wait for full initialization
-            containers=$(docker ps --filter "label=com.docker.compose.project=${PROJECT_NAME}" --format '{{.Names}}')
+            services=("frontend_1" "backend_1" "postgres_1")
 
-            if [ -z "$containers" ]; then
-              echo "No containers found for project ${PROJECT_NAME}"
-              exit 1
-            fi
+            # Loop over each service
+            for service in "${services[@]}"; do
+              container="${{ env.PROJECT_NAME }}_${service}"
 
-            # Assign each container's main process to the cgroup
-            for container in $containers; do
-              pid=$(docker inspect -f '{{.State.Pid}}' "$container")
-              if [ -n "$pid" ]; then
-                echo "Assigning $container (PID: $pid) to cgroup ${PROJECT_NAME}"
-                echo "$pid" | sudo tee /sys/fs/cgroup/${PROJECT_NAME}/cgroup.procs >/dev/null
+              if docker ps | grep -q "$container"; then
+                pid=$(docker inspect -f '{{.State.Pid}}' "$container")
+                echo "Assigning $container (PID: $pid) to cgroup"
+                echo "$pid" | sudo tee "/sys/fs/cgroup/${{ env.PROJECT_NAME }}/cgroup.procs"
               else
-                echo "Warning: Could not get PID for container $container"
+                echo "Container $container not found!"
+                exit 1
               fi
             done
             
